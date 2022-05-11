@@ -17,14 +17,13 @@ import scala.jdk.CollectionConverters._
 object WebServer extends PlayJsonSupport {
   def routes(streams: KafkaStreams): Route = {
     concat(
-<<<<<<< HEAD
       path("movies" / Segment) { id: String =>
         get {
 
           val kvStoreMovies: ReadOnlyKeyValueStore[Long, FilmInfo] = streams
             .store(StoreQueryParameters
               .fromNameAndType(StreamProcessing.storeMovieName,
-              QueryableStoreTypes.keyValueStore[Long, FilmInfo]()))
+                QueryableStoreTypes.keyValueStore[Long, FilmInfo]()))
 
           val FilmId = id.toLong
           val FilmInfo = kvStoreMovies.get(FilmId)
@@ -84,8 +83,8 @@ object WebServer extends PlayJsonSupport {
 
           val viewLastFiveMinuteHalf = kvStoreLastFiveMinutes
             .fetch((FilmId, "half"),
-            begin5m,
-            end5m).asScala.toList.head.value
+              begin5m,
+              end5m).asScala.toList.head.value
 
           val viewLastFiveMinuteFull = kvStoreLastFiveMinutes
             .fetch((FilmId, "full"),
@@ -97,12 +96,12 @@ object WebServer extends PlayJsonSupport {
           val lastFiveMinutes = Stat(viewLastFiveMinuteStartOnly, viewLastFiveMinuteHalf, viewLastFiveMinuteFull)
 
           val statistics = Map("past" -> past,
-                              "last_minute" -> lastMinute,
-                              "last_five_minutes" -> lastFiveMinutes)
+            "last_minute" -> lastMinute,
+            "last_five_minutes" -> lastFiveMinutes)
           complete(
             NbViewById(FilmId, FilmInfo.title, FilmInfo.view_count, statistics)
           )
-          }
+        }},
       path("/stats/ten/best/" / Segment) { stat: String =>
         get {
           stat match {
