@@ -6,10 +6,10 @@ import org.esgi.project.api.models.Stat
 import java.util.Dictionary
 
 case class NbViewById(
-                               _id: String,
+                               _id: Long,
                                title: String,
-                               view_count: Int,
-                               Stats: Dictionary[String, Stat]
+                               view_count: Long,
+                               Stats: Map[String, Stat]
                              )
 
 object NbViewById {
