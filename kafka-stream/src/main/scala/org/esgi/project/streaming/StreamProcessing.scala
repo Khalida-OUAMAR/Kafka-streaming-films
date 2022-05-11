@@ -25,9 +25,20 @@ object StreamProcessing extends PlayJsonSupport {
 
   // Declaration of store's names
 
+  val storeMovieName: String = "storeMovieName"
+
   val viewStartStore: String = "viewStartStore"
   val viewLastMinuteStore: String = "viewLastMinuteStore"
   val viewLast5MinutesStore: String = "viewLast5MinutesStore"
+
+  val movieBestScoreStore: String = "movieBestScoreStore"
+  val movieMoreViewStore: String = "movieMoreViewStore"
+  val movieWorstScoreStore: String = "movieWorstScoreStore"
+  val movieLessViewStore: String = "movieLessViewStore"
+
+  val meanScorePerMovieStore: String = "meanScorePerMovieStore"
+
+
 
 
   val props = buildProperties
@@ -41,24 +52,24 @@ object StreamProcessing extends PlayJsonSupport {
 
   /**
    * -----------------
-   * Global : Nb views per movie, repartition views per movie
+   * Global analyse : Nb views per movie, repartition views per movie
    * -----------------
    */
 
-    val viewsGroupedByMovie: KGroupedStream[Long, View] = views.groupBy((_, view) => view._id)
+    val movieName: KGroupedStream[Long, View] = views.groupBy((_, value) => views.title)(Materialized.as(storeMovieName))
 
-   // Implement a computation of the views count per movie for the <10% <90% >90% viewed time
+    val moviesGroupedByViewCategory: KGroupedStream[Long, View] = views.groupBy((_, value) => views.view_category)
 
-   val viewStart: KTable[Windowed[String], Long] = viewsGroupedByMovie
-     .count()(Materialized.as(viewStartStore))
+    val viewStart: KTable[Long, Long] = moviesGroupedByViewCategory
+       .count()(Materialized.as(viewStartStore))
 
-    val viewLastMinute: KTable[Windowed[String], Long] = viewsGroupedByMovie
+    val viewLastMinute: KTable[Windowed[Long], Long] = moviesGroupedByViewCategory
       .windowedBy(
         TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1))
       )
       .count()(Materialized.as(viewLastMinuteStore))
 
-    val viewLast5Minutes: KTable[Windowed[String], Long] = viewsGroupedByMovie
+    val viewLast5Minutes: KTable[Windowed[Long], Long] = moviesGroupedByViewCategory
       .windowedBy(
         TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1))
       )
@@ -66,27 +77,25 @@ object StreamProcessing extends PlayJsonSupport {
 
   /**
    * -------------------
-   * Part.2 of exercise
+   * Ratings
    * -------------------
    */
   // repartition views per time viewing
   val viewsGroupedByTimeViewing: KGroupedStream[String, View] = ???
 
-  // computation of the views count per viewing duration :
-  // Stop view at the beginning of the movie : <10% of global duration
-  // Stop view at the middle of the movie : <90% of global duration
-  // Stop view at the end of the movie : >90% of global duration
+  // BestScore, BestView, WorstScore, WorstView
+  val movieBestScoreStore: KTable[Windowed[String], Long] = ???
 
-  val viewsGroupedByViewingStopAtStart: KTable[Windowed[String], Long] = ???
+  val movieWorstScoreStore: KTable[Windowed[String], Long] = ???
 
-  val viewsGroupedByViewingStopAtMiddle: KTable[Windowed[String], Long] = ???
+  val movieMoreViewStore: KTable[Windowed[String], Long] = ???
 
-  val viewsGroupedByViewingStopAtEnd: KTable[Windowed[String], Long] = ???
+  val movieLessViewStore: KStream[String, Long] = ???
+
+  val meanScorePerMovieStore: KTable[String, Long] = ???
 
 
-  val visitsWithMetrics: KStream[String, VisitWithLatency] = ???
 
-  val meanLatencyPerUrl: KTable[String, MeanLatencyForURL] = ???
 
   def run(): KafkaStreams = {
     val streams: KafkaStreams = new KafkaStreams(builder.build(), props)
