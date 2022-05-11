@@ -37,6 +37,7 @@ object StreamProcessing extends PlayJsonSupport {
   val movieLessViewStore: String = "movieLessViewStore"
 
   val meanScorePerMovieStore: String = "meanScorePerMovieStore"
+  val WorstView: String = "WorstView"
 
 
 
