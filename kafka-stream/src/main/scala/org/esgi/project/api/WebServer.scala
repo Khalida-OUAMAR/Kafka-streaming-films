@@ -10,7 +10,7 @@ import org.esgi.project.api.models.{NbViewById, ScoreResponse, Stat, ViewRespons
 import org.esgi.project.streaming.StreamProcessing
 import org.esgi.project.streaming.models.FilmInfo
 
-import java.time.{Instant, OffsetDateTime}
+import java.time.{Instant}
 import scala.jdk.CollectionConverters._
 
 
@@ -48,7 +48,7 @@ object WebServer extends PlayJsonSupport {
           // 1 minutes
           val kvStoreLastMinute: ReadOnlyWindowStore[(Long, String), Long] = streams
             .store(StoreQueryParameters
-              .fromNameAndType(StreamProcessing.viewLastMinute,
+              .fromNameAndType(StreamProcessing.viewLastMinuteStore,
                 QueryableStoreTypes.windowStore[(Long, String), Long]()))
 
           val viewLastMinuteStartOnly = kvStoreLastMinute
@@ -72,7 +72,7 @@ object WebServer extends PlayJsonSupport {
           // last 5 minutes
           val kvStoreLastFiveMinutes: ReadOnlyWindowStore[(Long, String), Long] = streams
             .store(StoreQueryParameters
-              .fromNameAndType(StreamProcessing.viewLast5Minutes,
+              .fromNameAndType(StreamProcessing.viewLast5MinutesStore,
                 QueryableStoreTypes.windowStore[(Long, String), Long]())
             )
 
@@ -106,8 +106,6 @@ object WebServer extends PlayJsonSupport {
         get {
           stat match {
             case "score" =>
-              // TODO: load the store containing the visits count of the last 30 seconds and query it to
-              // TODO: fetch the keys of the last window and its info
               val kvStoreScore: ReadOnlyWindowStore[String, Long] = streams
                 .store(
                   StoreQueryParameters.fromNameAndType(
@@ -119,7 +117,6 @@ object WebServer extends PlayJsonSupport {
                 kvStoreScore.all().asScala.map(_.key.key()).toList.distinct
 
               complete(
-                // TODO: output a list of VisitCountResponse objects
                 keys.map((key) =>
                   ScoreResponse(
                     key,
@@ -134,8 +131,6 @@ object WebServer extends PlayJsonSupport {
                 )
               )
             case "views" =>
-              // TODO: load the store containing the visits count of the last minute and query it to
-              // TODO: fetch the keys of the last window and its info
               val kvStoreView: ReadOnlyWindowStore[String, Long] = streams
                 .store(
                   StoreQueryParameters.fromNameAndType(
@@ -147,7 +142,6 @@ object WebServer extends PlayJsonSupport {
                 kvStoreView.all().asScala.map(_.key.key()).toList.distinct
 
               complete(
-                // TODO: output a list of VisitCountResponse objects
                 keys.map((key) =>
                   ViewResponse(
                     key,
@@ -168,8 +162,6 @@ object WebServer extends PlayJsonSupport {
         get {
           stat match {
             case "score" =>
-              // TODO: load the store containing the visits count of the last 30 seconds and query it to
-              // TODO: fetch the keys of the last window and its info
               val kvStoreScore: ReadOnlyWindowStore[String, Long] = streams
                 .store(
                   StoreQueryParameters.fromNameAndType(
@@ -196,8 +188,6 @@ object WebServer extends PlayJsonSupport {
                 )
               )
             case "views" =>
-              // TODO: load the store containing the visits count of the last minute and query it to
-              // TODO: fetch the keys of the last window and its info
               val kvStoreView: ReadOnlyWindowStore[String, Long] = streams
                 .store(
                   StoreQueryParameters.fromNameAndType(
@@ -209,7 +199,6 @@ object WebServer extends PlayJsonSupport {
                 kvStoreView.all().asScala.map(_.key.key()).toList.distinct
 
               complete(
-                // TODO: output a list of VisitCountResponse objects
                 keys.map((key) =>
                   ViewResponse(
                     key,
