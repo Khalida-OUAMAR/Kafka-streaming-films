@@ -2,12 +2,12 @@ package org.esgi.project.streaming
 
 import io.github.azhur.kafkaserdeplayjson.PlayJsonSupport
 import org.apache.kafka.streams.KafkaStreams
-import org.apache.kafka.streams.kstream.Windowed
+import org.apache.kafka.streams.kstream.{TimeWindows, Windowed}
 import org.apache.kafka.streams.scala._
 import org.apache.kafka.streams.scala.kstream._
-import org.esgi.project.streaming.models.{MeanLatencyForURL, Metric, Visit, VisitWithLatency}
-
+import org.esgi.project.streaming.models.{Like, View}
 import java.io.InputStream
+import java.time.Duration
 import java.util.Properties
 
 object StreamProcessing extends PlayJsonSupport {
@@ -15,22 +15,20 @@ object StreamProcessing extends PlayJsonSupport {
   import org.apache.kafka.streams.scala.ImplicitConversions._
   import org.apache.kafka.streams.scala.serialization.Serdes._
 
-  // TODO: Predeclared store names to be used, fill your first & last name
-  val yourFirstName: String = ???
-  val yourLastName: String = ???
+  // Predeclared store names to be used, fill your first & last name
+  val yourFirstName: String = "Amandidne"
+  val yourLastName: String = "Thivet"
 
   val applicationName = s"web-events-stream-app-$yourFirstName-$yourLastName"
-  val visitsTopicName: String = "visits"
-  val metricsTopicName: String = "metrics"
+  val viewsTopicName: String = "views"
+  val likesTopicName: String = "likes"
 
-  val thirtySecondsStoreName: String = "VisitsOfLast30Seconds"
-  val lastMinuteStoreName = "VisitsOfLastMinute"
-  val lastFiveMinutesStoreName = "VisitsOfLast5Minutes"
+  // Declaration of store's names
 
-  val thirtySecondsByCategoryStoreName: String = "VisitsOfLast30SecondsByCategory"
-  val lastMinuteByCategoryStoreName = "VisitsOfLastMinuteByCategory"
-  val lastFiveMinutesByCategoryStoreName = "VisitsOfLast5MinutesByCategory"
-  val meanLatencyForURLStoreName = "MeanLatencyForURL"
+  val viewStartStore: String = "viewStartStore"
+  val viewLastMinuteStore: String = "viewLastMinuteStore"
+  val viewLast5MinutesStore: String = "viewLast5MinutesStore"
+
 
   val props = buildProperties
 
@@ -38,54 +36,57 @@ object StreamProcessing extends PlayJsonSupport {
   val builder: StreamsBuilder = new StreamsBuilder
 
   // TODO: declared topic sources to be used
-  val visits: KStream[String, Visit] = builder.stream[String, Visit](visitsTopicName)
-  val metrics: KStream[String, Metric] = builder.stream[String, Metric](metricsTopicName)
+  val views: KStream[String, View] = builder.stream[String, View](viewsTopicName)
+  val likes: KStream[String, Like] = builder.stream[String, Like](likesTopicName)
 
   /**
-   * -------------------
-   * Part.1 of exercise
-   * -------------------
+   * -----------------
+   * Global : Nb views per movie, repartition views per movie
+   * -----------------
    */
-  // TODO: repartition visits per URL
-  val visitsGroupedByUrl: KGroupedStream[String, Visit] = ???
 
-  // TODO: implement a computation of the visits count per URL for the last 30 seconds,
-  // TODO: the last minute and the last 5 minutes
-  val visitsOfLast30Seconds: KTable[Windowed[String], Long] = ???
+    val viewsGroupedByMovie: KGroupedStream[Long, View] = views.groupBy((_, view) => view._id)
 
-  val visitsOfLast1Minute: KTable[Windowed[String], Long] = ???
+   // Implement a computation of the views count per movie for the <10% <90% >90% viewed time
 
-  val visitsOfLast5Minute: KTable[Windowed[String], Long] = ???
+   val viewStart: KTable[Windowed[String], Long] = viewsGroupedByMovie
+     .count()(Materialized.as(viewStartStore))
+
+    val viewLastMinute: KTable[Windowed[String], Long] = viewsGroupedByMovie
+      .windowedBy(
+        TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1))
+      )
+      .count()(Materialized.as(viewLastMinuteStore))
+
+    val viewLast5Minutes: KTable[Windowed[String], Long] = viewsGroupedByMovie
+      .windowedBy(
+        TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1))
+      )
+      .count()(Materialized.as(viewLast5MinutesStore))
 
   /**
    * -------------------
    * Part.2 of exercise
    * -------------------
    */
-  // TODO: repartition visits topic per category instead (based on the 2nd part of the URLs)
-  val visitsGroupedByCategory: KGroupedStream[String, Visit] = ???
+  // repartition views per time viewing
+  val viewsGroupedByTimeViewing: KGroupedStream[String, View] = ???
 
-  // TODO: implement a computation of the visits count per category for the last 30 seconds,
-  // TODO: the last minute and the last 5 minutes
-  val visitsOfLast30SecondsByCategory: KTable[Windowed[String], Long] = ???
+  // computation of the views count per viewing duration :
+  // Stop view at the beginning of the movie : <10% of global duration
+  // Stop view at the middle of the movie : <90% of global duration
+  // Stop view at the end of the movie : >90% of global duration
 
-  val visitsOfLast1MinuteByCategory: KTable[Windowed[String], Long] = ???
+  val viewsGroupedByViewingStopAtStart: KTable[Windowed[String], Long] = ???
 
-  val visitsOfLast5MinuteByCategory: KTable[Windowed[String], Long] = ???
+  val viewsGroupedByViewingStopAtMiddle: KTable[Windowed[String], Long] = ???
 
-  // TODO: implement a join between the visits topic and the metrics topic,
-  // TODO: knowing the key for correlated events is currently the same UUID (and the same id field).
-  // TODO: the join should be done knowing the correlated events are emitted within a 5 seconds latency.
-  // TODO: the outputted message should be a VisitWithLatency object.
+  val viewsGroupedByViewingStopAtEnd: KTable[Windowed[String], Long] = ???
+
+
   val visitsWithMetrics: KStream[String, VisitWithLatency] = ???
 
-  // TODO: based on the previous join, compute the mean latency per URL
   val meanLatencyPerUrl: KTable[String, MeanLatencyForURL] = ???
-
-  // -------------------------------------------------------------
-  // TODO: now that you're here, materialize all of those KTables
-  // TODO: to stores to be able to query them in Webserver.scala
-  // -------------------------------------------------------------
 
   def run(): KafkaStreams = {
     val streams: KafkaStreams = new KafkaStreams(builder.build(), props)
