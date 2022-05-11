@@ -21,53 +21,128 @@ import scala.jdk.CollectionConverters._
 object WebServer extends PlayJsonSupport {
   def routes(streams: KafkaStreams): Route = {
     concat(
-      path("visits" / Segment) { period: String =>
+      path("/stats/ten/best/" / Segment) { stat: String =>
         get {
-          period match {
-            case "30s" =>
+          stat match {
+            case "score" =>
               // TODO: load the store containing the visits count of the last 30 seconds and query it to
               // TODO: fetch the keys of the last window and its info
-              val kvStore30Seconds: ReadOnlyWindowStore[String, Long] = ???
+              val kvStoreScore: ReadOnlyWindowStore[String, Long] = streams
+                .store(
+                  StoreQueryParameters.fromNameAndType(
+                    StreamProcessing.BestScore,
+                    QueryableStoreTypes.windowStore[String, Long]()
+                  )
+                )
+              val keys =
+                kvStoreScore.all().asScala.map(_.key.key()).toList.distinct
 
               complete(
                 // TODO: output a list of VisitCountResponse objects
-                List(VisitCountResponse("", 0))
+                keys.map((key) =>
+                  ScoreResponse(
+                    key,
+                    kvStoreScore
+                      .all()
+                      .asScala
+                      .toList
+                      .headOption
+                      .map(_.value)
+                      .getOrElse(0)
+                  )
+                )
               )
-            case "1m" =>
+            case "views" =>
               // TODO: load the store containing the visits count of the last minute and query it to
               // TODO: fetch the keys of the last window and its info
-              val kvStore1Minute: ReadOnlyWindowStore[String, Long] = ???
+              val kvStoreView: ReadOnlyWindowStore[String, Long] = streams
+                .store(
+                  StoreQueryParameters.fromNameAndType(
+                    StreamProcessing.BestView,
+                    QueryableStoreTypes.windowStore[String, Long]()
+                  )
+                )
+              val keys =
+                kvStoreView.all().asScala.map(_.key.key()).toList.distinct
 
               complete(
                 // TODO: output a list of VisitCountResponse objects
-                List(VisitCountResponse("", 0))
-              )
-            case "5m" =>
-              // TODO: load the store containing the visits count of the last five minutes and query it to
-              // TODO: fetch the keys of the last window and its info
-              val kvStore5Minute: ReadOnlyWindowStore[String, Long] = ???
-
-              complete(
-                // TODO: output a list of VisitCountResponse objects
-                List(VisitCountResponse("", 0))
-              )
-            case _ =>
-              // unhandled period asked
-              complete(
-                HttpResponse(StatusCodes.NotFound, entity = "Not found")
+                keys.map((key) =>
+                  ViewResponse(
+                    key,
+                    kvStoreView
+                      .all()
+                      .asScala
+                      .toList
+                      .headOption
+                      .map(_.value)
+                      .getOrElse(0)
+                  )
+                )
               )
           }
         }
       },
-      path("latency" / "beginning") {
+      path("/stats/ten/worst/" / Segment) { stat: String =>
         get {
-          // TODO: output the mean latency per URL since the start of the app
-          val kvStoreMeanLatencyPerURL: ReadOnlyKeyValueStore[String, MeanLatencyForURL] = ???
+          stat match {
+            case "score" =>
+              // TODO: load the store containing the visits count of the last 30 seconds and query it to
+              // TODO: fetch the keys of the last window and its info
+              val kvStoreScore: ReadOnlyWindowStore[String, Long] = streams
+                .store(
+                  StoreQueryParameters.fromNameAndType(
+                    StreamProcessing.WorstScore,
+                    QueryableStoreTypes.windowStore[String, Long]()
+                  )
+                )
+              val keys =
+                kvStoreScore.all().asScala.map(_.key.key()).toList.distinct
 
-          complete(
-            // TODO: output a list of MeanLatencyForURLResponse objects
-            List(MeanLatencyForURLResponse("", 0))
-          )
+              complete(
+                // TODO: output a list of VisitCountResponse objects
+                keys.map((key) =>
+                  ScoreResponse(
+                    key,
+                    kvStoreScore
+                      .all()
+                      .asScala
+                      .toList
+                      .headOption
+                      .map(_.value)
+                      .getOrElse(0)
+                  )
+                )
+              )
+            case "views" =>
+              // TODO: load the store containing the visits count of the last minute and query it to
+              // TODO: fetch the keys of the last window and its info
+              val kvStoreView: ReadOnlyWindowStore[String, Long] = streams
+                .store(
+                  StoreQueryParameters.fromNameAndType(
+                    StreamProcessing.WorstView,
+                    QueryableStoreTypes.windowStore[String, Long]()
+                  )
+                )
+              val keys =
+                kvStoreView.all().asScala.map(_.key.key()).toList.distinct
+
+              complete(
+                // TODO: output a list of VisitCountResponse objects
+                keys.map((key) =>
+                  ViewResponse(
+                    key,
+                    kvStoreView
+                      .all()
+                      .asScala
+                      .toList
+                      .headOption
+                      .map(_.value)
+                      .getOrElse(0)
+                  )
+                )
+              )
+          }
         }
       }
     )
