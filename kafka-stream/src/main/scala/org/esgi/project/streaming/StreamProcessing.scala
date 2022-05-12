@@ -5,7 +5,7 @@ import org.apache.kafka.streams.KafkaStreams
 import org.apache.kafka.streams.kstream.{JoinWindows, TimeWindows, Windowed}
 import org.apache.kafka.streams.scala._
 import org.apache.kafka.streams.scala.kstream._
-import org.esgi.project.streaming.models.{JoinViewLike, Like, MeanScoreByID, View}
+import org.esgi.project.streaming.models.{JoinViewLike, Like, MeanScoreByID, View, FilmInfo}
 import java.io.InputStream
 import java.time.Duration
 import java.util.Properties
@@ -40,16 +40,16 @@ object StreamProcessing extends PlayJsonSupport {
 
   val meanScorePerMovieStore: String = "meanScorePerMovieStore"
   val WorstView: String = "WorstView"
-
-
-
+  val viewPast: String = "viewPast"
+  val BestScore: String = "BestScore"
+  val BestView: String = "BestView"
+  val WorstScore: String = "WorstScore"
 
   val props = buildProperties
 
   // defining processing graph
   val builder: StreamsBuilder = new StreamsBuilder
 
-  // TODO: declared topic sources to be used
   val views: KStream[String, View] = builder.stream[String, View](viewsTopicName)
   val likes: KStream[String, Like] = builder.stream[String, Like](likesTopicName)
 
@@ -59,24 +59,34 @@ object StreamProcessing extends PlayJsonSupport {
    * -----------------
    */
 
-  val movieName: KGroupedStream[String, View] = views.groupBy((_, value) => value.title)(Materialized.as(storeMovieName))
 
-  val moviesGroupedByViewCategory: KGroupedStream[String, View] = views.groupBy((_, value) => value.view_category)
 
-  val viewStart: KTable[String, Long] = moviesGroupedByViewCategory
-    .count()(Materialized.as(viewStartStore))
+  val viewGroupedByMovie: KGroupedStream[Long, View] = {
+    views.groupBy((_, value) => value._id)
+  }
 
-  val viewLastMinute: KTable[Windowed[String], Long] = moviesGroupedByViewCategory
+
+  val viewLastMinute: KTable[Windowed[Long], FilmInfo] = viewGroupedByMovie
     .windowedBy(
       TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1))
     )
-    .count()(Materialized.as(viewLastMinuteStore))
+    .aggregate(FilmInfo.empty)(
+      (_,v,agg)=>agg.increment_view_count(v.view_category).set_title(v.title)
+    )(Materialized.as(viewLastMinuteStore))
 
-  val viewLast5Minutes: KTable[Windowed[String], Long] = moviesGroupedByViewCategory
+  val viewLast5Minutes: KTable[Windowed[Long], FilmInfo] = viewGroupedByMovie
     .windowedBy(
       TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1))
     )
-    .count()(Materialized.as(viewLast5MinutesStore))
+    .aggregate(FilmInfo.empty)(
+      (_,v,agg)=>agg.increment_view_count(v.view_category)
+        .set_title(v.title)
+    )(Materialized.as(viewLast5MinutesStore))
+
+  val viewPastTable: KTable[Long, FilmInfo] = viewGroupedByMovie
+    .aggregate(FilmInfo.empty)(
+      (_,v,agg)=>agg.increment_view_count(v.view_category).set_title(v.title)
+    )(Materialized.as(storeMovieName))
 
   /**
    * -------------------

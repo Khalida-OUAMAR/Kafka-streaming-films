@@ -19,87 +19,55 @@ object WebServer extends PlayJsonSupport {
     concat(
       path("movies" / Segment) { id: String =>
         get {
+          val FilmId = id.toLong
+          print(FilmId)
 
-          val kvStoreMovies: ReadOnlyKeyValueStore[Long, FilmInfo] = streams
+          val begin1m = Instant.now().minusSeconds(60)
+          val end1m = begin1m.plusSeconds(1)
+
+
+          val begin5m = Instant.now().minusSeconds(300)
+          val end5m = begin5m.plusSeconds(1)
+          // 1 minutes
+          val kvStoreLastMinute: ReadOnlyWindowStore[Long, FilmInfo] = streams
+            .store(StoreQueryParameters
+              .fromNameAndType(StreamProcessing.viewLastMinuteStore,
+                QueryableStoreTypes.windowStore[Long, FilmInfo]()))
+
+          val viewLastMinute: FilmInfo = kvStoreLastMinute
+            .fetch(
+              FilmId,
+              begin1m,
+              end1m).asScala.toList.headOption.map(_.value).getOrElse(FilmInfo.empty)
+
+          val kvStoreLast5Minute: ReadOnlyWindowStore[Long, FilmInfo] = streams
+            .store(StoreQueryParameters
+              .fromNameAndType(StreamProcessing.viewLast5MinutesStore,
+                QueryableStoreTypes.windowStore[Long, FilmInfo]()))
+
+          val viewLast5Minutes = kvStoreLast5Minute
+            .fetch(
+              FilmId,
+              begin5m,
+              end5m).asScala.toList.headOption.map(_.value).getOrElse(FilmInfo.empty)
+
+          val kvStorePast: ReadOnlyKeyValueStore[Long, FilmInfo] = streams
             .store(StoreQueryParameters
               .fromNameAndType(StreamProcessing.storeMovieName,
                 QueryableStoreTypes.keyValueStore[Long, FilmInfo]()))
 
-          val FilmId = id.toLong
-          val FilmInfo = kvStoreMovies.get(FilmId)
+          val viewPast = kvStorePast.get(FilmId)
 
-          // now
-          val viewPast: ReadOnlyKeyValueStore[(Long, String), Long] = streams
-            .store(StoreQueryParameters.fromNameAndType(StreamProcessing.viewPast,
-              QueryableStoreTypes.keyValueStore[(Long, String), Long]()))
+          val lastMinute = Stat(viewLastMinute.start_only, viewLastMinute.half, viewLastMinute.full)
+          val lastFiveMinutes = Stat(viewLast5Minutes.start_only, viewLast5Minutes.half, viewLast5Minutes.full)
+          val past = Stat(viewPast.start_only, viewPast.half, viewPast.full)
 
-          val viewPastStartOnly: Long = viewPast.get((FilmId, "start_only"))
-          val viewPastHalf: Long = viewPast.get((FilmId, "half"))
-          val viewPastFull: Long = viewPast.get((FilmId, "full"))
-
-          val begin1m = Instant.now().minusSeconds(60)
-          val end1m = begin1m.minusSeconds(1)
-
-
-          val begin5m = Instant.now().minusSeconds(300)
-          val end5m = begin5m.minusSeconds(1)
-
-
-          // 1 minutes
-          val kvStoreLastMinute: ReadOnlyWindowStore[(Long, String), Long] = streams
-            .store(StoreQueryParameters
-              .fromNameAndType(StreamProcessing.viewLastMinuteStore,
-                QueryableStoreTypes.windowStore[(Long, String), Long]()))
-
-          val viewLastMinuteStartOnly = kvStoreLastMinute
-            .fetch(
-              (FilmId, "start_only"),
-              begin1m,
-              end1m).asScala.toList.head.value
-
-          val viewLastMinuteHalf = kvStoreLastMinute
-            .fetch(
-              (FilmId, "half"),
-              begin1m,
-              end1m).asScala.toList.head.value
-
-          val viewLastMinuteFull = kvStoreLastMinute
-            .fetch(
-              (FilmId, "full"),
-              begin1m,
-              end1m).asScala.toList.head.value
-
-          // last 5 minutes
-          val kvStoreLastFiveMinutes: ReadOnlyWindowStore[(Long, String), Long] = streams
-            .store(StoreQueryParameters
-              .fromNameAndType(StreamProcessing.viewLast5MinutesStore,
-                QueryableStoreTypes.windowStore[(Long, String), Long]())
-            )
-
-          val viewLastFiveMinuteStartOnly = kvStoreLastFiveMinutes
-            .fetch((FilmId, "start_only"),
-              begin5m,
-              end5m).asScala.toList.head.value
-
-          val viewLastFiveMinuteHalf = kvStoreLastFiveMinutes
-            .fetch((FilmId, "half"),
-              begin5m,
-              end5m).asScala.toList.head.value
-
-          val viewLastFiveMinuteFull = kvStoreLastFiveMinutes
-            .fetch((FilmId, "full"),
-              begin5m,
-              end5m).asScala.toList.head.value
-
-          val past = Stat(viewPastStartOnly, viewPastHalf, viewPastFull)
-          val lastMinute = Stat(viewLastMinuteStartOnly, viewLastMinuteHalf, viewLastMinuteFull)
-          val lastFiveMinutes = Stat(viewLastFiveMinuteStartOnly, viewLastFiveMinuteHalf, viewLastFiveMinuteFull)
-
-          val statistics = Map("past" -> past,
+          val statistics = Map(
+            "past" -> past,
             "last_minute" -> lastMinute,
             "last_five_minutes" -> lastFiveMinutes)
           complete(
-            NbViewById(FilmId, FilmInfo.title, FilmInfo.view_count, statistics)
+            NbViewById(FilmId, viewLastMinute.title, viewPast.view_count, statistics)
           )
         }},
       path("/stats/ten/best/" / Segment) { stat: String =>
