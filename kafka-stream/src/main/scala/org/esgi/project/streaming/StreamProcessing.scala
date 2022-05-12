@@ -2,10 +2,10 @@ package org.esgi.project.streaming
 
 import io.github.azhur.kafkaserdeplayjson.PlayJsonSupport
 import org.apache.kafka.streams.KafkaStreams
-import org.apache.kafka.streams.kstream.{TimeWindows, Windowed}
+import org.apache.kafka.streams.kstream.{JoinWindows, TimeWindows, Windowed}
 import org.apache.kafka.streams.scala._
 import org.apache.kafka.streams.scala.kstream._
-import org.esgi.project.streaming.models.{Like, View}
+import org.esgi.project.streaming.models.{JoinViewLike, Like, MeanScoreByID, View}
 import java.io.InputStream
 import java.time.Duration
 import java.util.Properties
@@ -22,10 +22,12 @@ object StreamProcessing extends PlayJsonSupport {
   val applicationName = s"web-events-stream-app-$yourFirstName-$yourLastName"
   val viewsTopicName: String = "views"
   val likesTopicName: String = "likes"
+  val joinViewLikeTopicName: String = "joinviewlike"
 
   // Declaration of store's names
 
   val storeMovieName: String = "storeMovieName"
+  val movieMeanScoreStore: String = "movieMeanScoreStore"
 
   val viewStartStore: String = "viewStartStore"
   val viewLastMinuteStore: String = "viewLastMinuteStore"
@@ -38,10 +40,6 @@ object StreamProcessing extends PlayJsonSupport {
 
   val meanScorePerMovieStore: String = "meanScorePerMovieStore"
   val WorstView: String = "WorstView"
-  val viewPast: String = "viewPast"
-  val BestScore: String = "BestScore"
-  val BestView: String = "BestView"
-  val WorstScore: String = "WorstScore"
 
 
 
@@ -61,45 +59,59 @@ object StreamProcessing extends PlayJsonSupport {
    * -----------------
    */
 
-    val movieName: KGroupedStream[Long, View] = views.groupBy((_, value) => views.title)(Materialized.as(storeMovieName))
+  val movieName: KGroupedStream[String, View] = views.groupBy((_, value) => value.title)(Materialized.as(storeMovieName))
 
-    val moviesGroupedByViewCategory: KGroupedStream[Long, View] = views.groupBy((_, value) => views.view_category)
+  val moviesGroupedByViewCategory: KGroupedStream[String, View] = views.groupBy((_, value) => value.view_category)
 
-    val viewStart: KTable[Long, Long] = moviesGroupedByViewCategory
-       .count()(Materialized.as(viewStartStore))
+  val viewStart: KTable[String, Long] = moviesGroupedByViewCategory
+    .count()(Materialized.as(viewStartStore))
 
-    val viewLastMinute: KTable[Windowed[Long], Long] = moviesGroupedByViewCategory
-      .windowedBy(
-        TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1))
-      )
-      .count()(Materialized.as(viewLastMinuteStore))
+  val viewLastMinute: KTable[Windowed[String], Long] = moviesGroupedByViewCategory
+    .windowedBy(
+      TimeWindows.of(Duration.ofMinutes(1)).advanceBy(Duration.ofSeconds(1))
+    )
+    .count()(Materialized.as(viewLastMinuteStore))
 
-    val viewLast5Minutes: KTable[Windowed[Long], Long] = moviesGroupedByViewCategory
-      .windowedBy(
-        TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1))
-      )
-      .count()(Materialized.as(viewLast5MinutesStore))
+  val viewLast5Minutes: KTable[Windowed[String], Long] = moviesGroupedByViewCategory
+    .windowedBy(
+      TimeWindows.of(Duration.ofMinutes(5)).advanceBy(Duration.ofSeconds(1))
+    )
+    .count()(Materialized.as(viewLast5MinutesStore))
 
   /**
    * -------------------
    * Ratings
    * -------------------
    */
-  // repartition views per time viewing
-  val viewsGroupedByTimeViewing: KGroupedStream[String, View] = ???
 
-  // BestScore, BestView, WorstScore, WorstView
-  val movieBestScoreStore: KTable[Windowed[String], Long] = ???
+  // Join View Like
+  val joinViewsWithLikes: KStream[String, JoinViewLike] = views
+    .join(likes)(
+      { (view, like) =>
+        JoinViewLike(
+          _id = view._id,
+          title = view.title,
+          view_category = view.view_category,
+          score = like.score
+        )
+      },
+      JoinWindows.of(Duration.ofSeconds(5))
+    )
 
-  val movieWorstScoreStore: KTable[Windowed[String], Long] = ???
-
-  val movieMoreViewStore: KTable[Windowed[String], Long] = ???
-
-  val movieLessViewStore: KStream[String, Long] = ???
-
-  val meanScorePerMovieStore: KTable[String, Long] = ???
+  // Recup liste avec id  pour l'agg
+  val viewsLikesGroupById: KGroupedStream[Long, JoinViewLike] = joinViewsWithLikes.groupBy((_, joinViewsWithLikes) => joinViewsWithLikes._id)
 
 
+  // Mean score
+  val movieMeanScore:  KTable[Long, MeanScoreByID] = joinViewsWithLikes
+    .map((_, joinViewLike) => (joinViewLike._id, joinViewLike))
+    .groupByKey
+    .aggregate(MeanScoreByID.empty) {
+      (_, newJoinViewLike, accumulator) =>
+        accumulator
+          .increment(score = newJoinViewLike.score)
+          .computeMeanScore
+    }(Materialized.as(movieMeanScoreStore))
 
 
   def run(): KafkaStreams = {
